@@ -4,14 +4,12 @@ name: Benchmark
 # events that trigger the workflow (required)
 on:
   push:
-    # pushes to the following branches
     branches:
       - main
   pull_request:
-    # pull request where master is target
     branches:
       - main
-  workflow_dispatch:  # Add this line to allow manual triggering
+  workflow_dispatch:  # Allow manual triggering
 
 permissions:
   contents: write        # Allows reading and writing repository contents
@@ -58,30 +56,58 @@ jobs:
         run: |
           git clone https://github.com/JonathonLuiten/TrackEval.git tracking/val_utils
 
-      # Restore the cached dataset (if available)
       - name: Restore MOT17 dataset cache
         uses: actions/cache@v4
         with:
           # Specify the path where the dataset is stored
           path: tracking/val_utils/MOT17-50.zip
-          # Create a cache key, you can use a fixed key if the dataset is static
+          # Use a fixed key (change as necessary if the file updates)
           key: mot17-50-dataset-cache-v3
+
+      # --- New steps for runs.zip caching and cleanup ---
+
+      - name: Restore runs.zip cache
+        id: restore-runs-cache
+        uses: actions/cache@v4
+        with:
+          path: runs.zip
+          key: runs-zip-cache-v1
 
       - name: Download eval data
         run: |
-          wget https://github.com/mikel-brostrom/boxmot/releases/download/v10.0.83/runs.zip -O runs.zip
+          # Only download runs.zip if it is not already present from the cache
+          if [ ! -f runs.zip ]; then
+            wget https://github.com/mikel-brostrom/boxmot/releases/download/v10.0.83/runs.zip -O runs.zip
+          else
+            echo "Using cached runs.zip"
+          fi
+
+          # Download the MOT17-50 dataset
           wget https://github.com/mikel-brostrom/boxmot/releases/download/v10.0.83/MOT17-50.zip -O tracking/val_utils/MOT17-50.zip
+
+          # Unzip the downloaded files
           unzip runs.zip -d ./
           mkdir -p tracking/val_utils/data
           unzip tracking/val_utils/MOT17-50.zip -d ./tracking/val_utils/data/
 
-      # Cache data for future runs (only if the cache was not already restored)
       - name: Cache MOT17.zip if not already cached
-        if: steps.cache-restore.outputs.cache-hit != 'true'  # Only run if the cache was not hit
+        if: steps['Restore MOT17 dataset cache'].outputs.cache-hit != 'true'
         uses: actions/cache@v4
         with:
           path: tracking/val_utils/MOT17-50.zip
           key: mot17-50-dataset-cache-v3
+
+      - name: Cache runs.zip if not already cached
+        if: steps.restore-runs-cache.outputs.cache-hit != 'true'
+        uses: actions/cache@v4
+        with:
+          path: runs.zip
+          key: runs-zip-cache-v1
+
+      - name: Cleanup runs.zip
+        run: rm -f runs.zip
+
+      # --- End new steps for runs.zip ---
 
       - name: Evaluation and Summarize Results
         run: |
@@ -178,7 +204,6 @@ jobs:
           paper_links["hybridsort"]="https://arxiv.org/abs/2308.00783"
           paper_links["imprassoc"]="https://openaccess.thecvf.com/content/CVPR2023W/E2EAD/papers/Stadler_An_Improved_Association_Pipeline_for_Multi-Person_Tracking_CVPRW_2023_paper.pdf"
 
-
           # Create the markdown table header
           new_table="| Tracker | Status  | HOTA↑ | MOTA↑ | IDF1↑ |\n"
           new_table+="| :-----: | :-----: | :---: | :---: | :---: |\n"
@@ -220,12 +245,12 @@ jobs:
         run: |
           if git diff --quiet README.md; then
             echo "No changes to commit."
-            echo "changed=false" >> $GITHUB_ENV  # Writing to the environment file
+            echo "changed=false" >> $GITHUB_ENV
           else
             echo "README changed!"
-            echo "changed=true" >> $GITHUB_ENV  # Writing to the environment file
+            echo "changed=true" >> $GITHUB_ENV
             BRANCH_NAME="update-tracker-results-$(date +%Y%m%d%H%M%S)"
-            echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV  # Store the branch name in the GitHub environment
+            echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
           fi
 
       # Create a pull request (PR)
@@ -235,8 +260,8 @@ jobs:
         with:
           add-paths: README.md
           token: ${{ secrets.GITHUB_TOKEN }}
-          branch: ${{ env.BRANCH_NAME }}  # Use the created branch
-          base: master  # Base branch for the pull request, replace with your actual base branch (e.g., main or develop)
+          branch: ${{ env.BRANCH_NAME }}
+          base: master
           commit-message: Overwrite tracker results in README.md
           title: Overwrite tracker results in README.md
           body: "This PR updates the tracker results table in the README.md."
