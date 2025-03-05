@@ -459,7 +459,7 @@ def parse_opt() -> argparse.Namespace:
     parser.add_argument('--half', action='store_true', help='use FP16 half-precision inference')
     parser.add_argument('--vid-stride', type=int, default=1, help='video frame-rate stride')
     parser.add_argument('--ci', action='store_true', help='Automatically reuse existing due to no UI in CI')
-    parser.add_argument('--tracking-method', type=str, default='deepocsort', help='deepocsort, botsort, strongsort, ocsort, bytetrack, imprassoc')
+    parser.add_argument('--tracking-method', type=str, default='deepocsort', help='deepocsort, botsort, strongsort, ocsort, bytetrack, imprassoc, boosttrack')
     parser.add_argument('--dets-file-path', type=Path, help='path to detections file')
     parser.add_argument('--embs-file-path', type=Path, help='path to embeddings file')
     parser.add_argument('--exp-folder-path', type=Path, help='path to experiment folder')
@@ -484,7 +484,7 @@ def parse_opt() -> argparse.Namespace:
     generate_mot_results_parser = subparsers.add_parser('generate_mot_results', help='Generate MOT results')
     generate_mot_results_parser.add_argument('--yolo-model', nargs='+', type=Path, default=WEIGHTS / 'yolov8n.pt', help='yolo model path')
     generate_mot_results_parser.add_argument('--reid-model', nargs='+', type=Path, default=WEIGHTS / 'osnet_x0_25_msmt17.pt', help='reid model path')
-    generate_mot_results_parser.add_argument('--tracking-method', type=str, default='deepocsort', help='deepocsort, botsort, strongsort, ocsort, bytetrack, imprassoc')
+    generate_mot_results_parser.add_argument('--tracking-method', type=str, default='deepocsort', help='deepocsort, botsort, strongsort, ocsort, bytetrack, imprassoc, boosttrack')
     generate_mot_results_parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, default=[640], help='inference size h,w')
 
     # Subparser for trackeval
@@ -503,8 +503,10 @@ if __name__ == "__main__":
     
     # download MOT benchmark
     download_mot_eval_tools(opt.val_tools_path)
-    zip_path = download_mot_dataset(opt.val_tools_path, opt.benchmark)
-    unzip_mot_dataset(zip_path, opt.val_tools_path, opt.benchmark)
+
+    if not Path(opt.source).exists():
+        zip_path = download_mot_dataset(opt.val_tools_path, opt.benchmark)
+        unzip_mot_dataset(zip_path, opt.val_tools_path, opt.benchmark)
 
     if opt.benchmark == 'MOT17':
         cleanup_mot17(opt.source)
